@@ -1,0 +1,10 @@
+bin/
+develop-eggs/
+*.egg-info/
+.installed.cfg
+*.pyc
+*.pyo
+parts/
+nginx/nginx.conf
+
+

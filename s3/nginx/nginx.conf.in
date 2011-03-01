@@ -1,0 +1,53 @@
+# -*- mode: perl -*-
+
+worker_processes  1;
+daemon "off";
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    server {
+        listen       19999;
+        server_name  "localhost";
+
+        location ~ '^/([^/]+)/(.*)$' {
+            set $bucket $1;
+            set $key $2;
+
+            # Setup AWS Authorization header
+            set $aws_signature '';
+
+            # the only reason we need lua is to get the current date
+            set_by_lua $now "return ngx.cookie_time(ngx.time())";
+
+            #the  access key
+            set $aws_access_key '${aws_access_key}';
+            set $aws_secret_key '${aws_secret_key}';
+
+            # the actual string to be signed
+            # see: http://docs.amazonwebservices.com/AmazonS3/latest/dev/RESTAuthentication.html
+            set $string_to_sign "$request_method\n\n\n\nx-amz-date:$now\n/$bucket/$key";
+
+            # create the hmac signature
+            set_hmac_sha1 $aws_signature $aws_secret_key $string_to_sign;
+            # encode the signature with base64
+            set_encode_base64 $aws_signature $aws_signature;
+            proxy_set_header x-amz-date $now;
+            proxy_set_header Authorization "AWS $aws_access_key:$aws_signature";
+
+            rewrite .* /$key break;
+
+            # we need to set the host header here in order to find the bucket
+            proxy_set_header Host $bucket.s3.amazonaws.com;
+            rewrite .* /$key break;
+
+            # another solution would be to use the bucket in the url
+            # rewrite .* /$bucket/$key break;
+
+            proxy_pass http://s3.amazonaws.com;
+        }
+    }
+}
